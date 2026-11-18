@@ -6,12 +6,40 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// In-memory user store for sign in/up
+const users = [];
+
 // Test Route
 app.get('/', (req, res) => {
-    res.send('Luxembourg Backend (Telegram Bot) is running!');
+    res.send('Luxembourg Backend is running successfully!');
 });
 
-// Submit Application Route
+// Sign Up Route
+app.post('/api/signup', (req, res) => {
+    const { name, email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    const existingUser = users.find(u => u.email === email);
+    if (existingUser) {
+        return res.status(400).json({ error: 'User already exists with this email.' });
+    }
+    const newUser = { name: name || email, email, password };
+    users.push(newUser);
+    res.status(201).json({ message: 'User registered successfully', user: { name: newUser.name, email: newUser.email } });
+});
+
+// Sign In Route
+app.post('/api/signin', (req, res) => {
+    const { email, password } = req.body;
+    const user = users.find(u => u.email === email && u.password === password);
+    if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    res.json({ message: 'Signed in successfully', user: { name: user.name, email: user.email } });
+});
+
+// Submit Application Route (with Telegram Forwarding)
 app.post('/api/submit-application', async (req, res) => {
     const data = req.body;
     console.log('Received Application Submission:', data);
@@ -38,7 +66,7 @@ app.post('/api/submit-application', async (req, res) => {
     try {
         if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
             const telegramUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
-            const tgResponse = await fetch(telegramUrl, {
+            await fetch(telegramUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -46,10 +74,6 @@ app.post('/api/submit-application', async (req, res) => {
                     text: messageText
                 })
             });
-            const tgResult = await tgResponse.json();
-            console.log('Telegram API Response:', tgResult);
-        } else {
-            console.log('Telegram Token or Chat ID is missing from environment variables.');
         }
 
         res.status(200).json({ message: 'Application submitted successfully!' });
